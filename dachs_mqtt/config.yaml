@@ -1,0 +1,34 @@
+name: Dachs MQTT Bridge
+version: "1.0.0"
+slug: dachs_mqtt
+description: Reads Dachs values and publishes them to MQTT with HA Discovery
+startup: services
+boot: auto
+host_network: true
+
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+
+options:
+  dachs_host: 192.168.178.52
+  dachs_user: glt
+  dachs_password: PASSWORT
+  mqtt_host: 192.168.178.10
+  mqtt_port: 1883
+  topic_prefix: dachs
+  interval: 15
+
+schema:
+  dachs_host: str
+  dachs_user: str
+  dachs_password: str
+  mqtt_host: str
+  mqtt_port: int
+  topic_prefix: str
+  interval: int
+
+image: ghcr.io/jakob/dachs-mqtt-addon/{arch}
