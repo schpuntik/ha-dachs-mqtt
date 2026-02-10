@@ -31,4 +31,4 @@ schema:
   topic_prefix: str
   interval: int
 
-image: ghcr.io/jakob/dachs-mqtt-addon/{arch}
+image: ghcr.io/schpuntik/ha-dachs-mqtt/{arch}
