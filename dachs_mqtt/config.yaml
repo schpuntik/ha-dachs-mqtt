@@ -19,6 +19,8 @@ options:
   dachs_password: PASSWORT
   mqtt_host: 192.168.178.10
   mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_password: ""
   topic_prefix: dachs
   interval: 15
 
@@ -28,6 +30,8 @@ schema:
   dachs_password: str
   mqtt_host: str
   mqtt_port: int
+  mqtt_user: str?
+  mqtt_password: str?
   topic_prefix: str
   interval: int
 
