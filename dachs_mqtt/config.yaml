@@ -1,5 +1,5 @@
 name: Dachs MQTT Bridge
-version: "1.0.0"
+version: "1.0.1"
 slug: dachs_mqtt
 description: MQTT bridge for Dachs
 arch:
