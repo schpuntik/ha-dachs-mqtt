@@ -1,4 +1,5 @@
-FROM python:3.10-alpine
+ARG BUILD_FROM=ghcr.io/home-assistant/{arch}-base-python:3.11
+FROM $BUILD_FROM
 
 WORKDIR /app
 
