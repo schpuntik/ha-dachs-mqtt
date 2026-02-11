@@ -1,12 +1,11 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+FROM python:3.12-alpine
 
 WORKDIR /app
 
 COPY dachs.py /app/dachs.py
 COPY run.sh /app/run.sh
 
-RUN pip3 install --no-cache-dir requests paho-mqtt
+RUN pip install --no-cache-dir requests paho-mqtt
 
 RUN chmod +x /app/run.sh
 
