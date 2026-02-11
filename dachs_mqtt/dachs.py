@@ -5,6 +5,9 @@ import json
 import requests
 import paho.mqtt.client as mqtt
 
+# ---------------------------------------------------------
+# Загрузка конфигурации Home Assistant
+# ---------------------------------------------------------
 CONFIG_PATH = "/data/options.json"
 with open(CONFIG_PATH, "r") as f:
     cfg = json.load(f)
@@ -15,12 +18,14 @@ DACHS_PASS = cfg["dachs_password"]
 
 MQTT_HOST = cfg["mqtt_host"]
 MQTT_PORT = cfg["mqtt_port"]
+MQTT_USER = cfg.get("mqtt_user", "")
+MQTT_PASSWORD = cfg.get("mqtt_password", "")
+
 TOPIC_PREFIX = cfg["topic_prefix"]
 INTERVAL = cfg["interval"]
 
 DACHS_URL = f"http://{DACHS_HOST}:8080/getKey?k="
 DACHS_URL_END = "&_rnd=9619"
-
 # -----------------------------
 # ВСТАВЬ СЮДА ПОЛНЫЙ СПИСОК
 # ИЗ ТВОЕГО ОРИГИНАЛЬНОГО СКРИПТА
@@ -166,9 +171,9 @@ ZumDachs = (
 		[1,"Wartung_Cache.usIntervall",		 "Wartungsintervall Betriebsstunden",   ""]
 )
 
-# -----------------------------
+# ---------------------------------------------------------
 # Функции
-# -----------------------------
+# ---------------------------------------------------------
 def read_dachs_value(key):
     url = DACHS_URL + key + DACHS_URL_END
     try:
@@ -227,11 +232,29 @@ def publish_discovery(client, key, desc):
     client.publish(topic, json.dumps(payload), retain=True)
 
 
+# ---------------------------------------------------------
+# Современный MQTT-клиент (Callback API v2)
+# ---------------------------------------------------------
+def create_mqtt_client():
+    client = mqtt.Client(
+        client_id="dachs_mqtt_bridge",
+        protocol=mqtt.MQTTv311,
+        transport="tcp",
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+    )
+
+    if MQTT_USER:
+        client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+
+    return client
+
+
 def connect_mqtt():
+    client = create_mqtt_client()
+
     while True:
         try:
-            client = mqtt.Client()
-            client.connect(MQTT_HOST, MQTT_PORT, 60)
+            client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
             client.loop_start()
             print("[INFO] Connected to MQTT")
             return client
@@ -240,14 +263,13 @@ def connect_mqtt():
             time.sleep(10)
 
 
-# -----------------------------
+# ---------------------------------------------------------
 # Основной watchdog‑цикл
-# -----------------------------
+# ---------------------------------------------------------
 print("Starting Dachs → MQTT bridge with watchdog...")
 
 mqtt_client = connect_mqtt()
 
-# Discovery публикуем один раз при старте и при успешном реконнекте
 def publish_all_discovery():
     for fmt, key, desc, uuid in ZumDachs:
         publish_discovery(mqtt_client, key, desc)
@@ -269,18 +291,18 @@ while True:
             topic = f"{TOPIC_PREFIX}/{key.replace('.', '/')}"
             mqtt_client.publish(topic, value, retain=True)
 
-        # выдерживаем интервал опроса
         elapsed = time.time() - loop_start
         sleep_time = max(1, INTERVAL - elapsed)
         time.sleep(sleep_time)
 
     except Exception as e:
         print(f"[FATAL] Unexpected error in main loop: {e}")
-        # пробуем переподключить MQTT и продолжить
+
         try:
             mqtt_client.loop_stop()
-        except Exception:
+        except:
             pass
+
         mqtt_client = connect_mqtt()
         publish_all_discovery()
         print("[INFO] Watchdog: recovered from error, continuing...")
