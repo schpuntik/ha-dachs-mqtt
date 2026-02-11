@@ -38,5 +38,7 @@ jobs:
           file: ./dachs_mqtt/Dockerfile
           platforms: linux/${{ matrix.arch }}
           push: true
+          build-args: |
+            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base-python:3.11
           tags: |
             ghcr.io/${{ github.repository }}/dachs_mqtt-${{ matrix.arch }}:latest

@@ -1,20 +1,14 @@
 name: Dachs MQTT Bridge
 version: "1.0.0"
 slug: dachs_mqtt
-description: Reads Dachs values and publishes them to MQTT with HA Discovery
-startup: services
-boot: auto
-host_network: true
-
+description: MQTT bridge for Dachs
 arch:
   - amd64
   - aarch64
 startup: application
 boot: auto
-ports: {}
-ports_description: {}
-map: []
-options: {}
-schema: {}
 image: ghcr.io/schpuntik/ha-dachs-mqtt/dachs_mqtt-{arch}
 
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base-python:3.11
+  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.11
