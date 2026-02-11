@@ -7,8 +7,5 @@ arch:
   - aarch64
 startup: application
 boot: auto
-image: ghcr.io/schpuntik/ha-dachs-mqtt/dachs_mqtt-{arch}
 
-build_from:
-  amd64: ghcr.io/home-assistant/amd64-addon-base-python3:3.12
-  aarch64: ghcr.io/home-assistant/aarch64-addon-base-python3:3.12
+image: ghcr.io/schpuntik/ha-dachs-mqtt/dachs_mqtt-{arch}
