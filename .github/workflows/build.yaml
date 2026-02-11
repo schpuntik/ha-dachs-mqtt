@@ -48,3 +48,4 @@ jobs:
 
           tags: |
             ghcr.io/${{ github.repository }}/dachs_mqtt-${{ matrix.arch }}:latest
+
