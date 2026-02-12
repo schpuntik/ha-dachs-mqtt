@@ -15,6 +15,7 @@ RUN if ! command -v python3 >/dev/null 2>&1; then \
         apk add --no-cache python3 py3-pip; \
     fi
 
-RUN pip3 install --no-cache-dir -r dachs_mqtt/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r dachs_mqtt/requirements.txt
+
 
 CMD [ "/run.sh" ]
