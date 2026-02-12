@@ -9,7 +9,7 @@ host_network: true
 arch:
   - amd64
   - aarch64
-  - armhf
+  - armv7
   - i386
 
 options:
