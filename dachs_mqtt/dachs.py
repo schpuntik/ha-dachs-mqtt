@@ -1,275 +1,260 @@
-#!/usr/bin/env python3
-import os
-import time
 import json
+import time
+import logging
 import requests
 import paho.mqtt.client as mqtt
+from pathlib import Path
+
+from .sectors import SECTORS
+
+logging.basicConfig(level=logging.INFO)
+_LOGGER = logging.getLogger("dachs_mqtt")
+
+OPTIONS_PATH = Path("/data/options.json")
+
 
 # ---------------------------------------------------------
-# Загрузка конфигурации Home Assistant
+# Загрузка конфигурации аддона
 # ---------------------------------------------------------
-CONFIG_PATH = "/data/options.json"
-with open(CONFIG_PATH, "r") as f:
-    cfg = json.load(f)
+def load_options():
+    with OPTIONS_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
-DACHS_HOST = cfg["dachs_host"]
-DACHS_USER = cfg["dachs_user"]
-DACHS_PASS = cfg["dachs_password"]
-
-MQTT_HOST = cfg["mqtt_host"]
-MQTT_PORT = cfg["mqtt_port"]
-MQTT_USER = cfg.get("mqtt_user", "")
-MQTT_PASSWORD = cfg.get("mqtt_password", "")
-
-TOPIC_PREFIX = cfg["topic_prefix"]
-INTERVAL = cfg["interval"]
-
-DACHS_URL = f"http://{DACHS_HOST}:8080/getKey?k="
-DACHS_URL_END = "&_rnd=9619"
-# -----------------------------
-# ВСТАВЬ СЮДА ПОЛНЫЙ СПИСОК
-# ИЗ ТВОЕГО ОРИГИНАЛЬНОГО СКРИПТА
-# -----------------------------
-ZumDachs = (
-		[1,"Hka_Bd.Anforderung.ModulAnzahl",        "Anzahl der angeforderten Module",          ""],
-		[4,"Hka_Bd.Anforderung.UStromF_Anf.bFlagSF","Anforderungen Stromfuehrung Bit Codiert",  ""],
-		[4,"Hka_Bd.UStromF_Frei.bFreigabe",         "Freigabe Stromfuehrung Bit Codiert",       ""],
-		[1,"Hka_Bd.bStoerung",			    "Aktuelle Stoerung Dachs = Wert + 100",     ""],
-		[1,"Hka_Bd.bWarnung",			    "Aktueller Warncode Dachs = Wert + 600",    ""],
-		[1,"Hka_Bd.UHka_Anf.Anforderung.fStrom",    "Anforderung Strom Flag",                   ""],
-		[3,"Hka_Bd.UHka_Anf.usAnforderung",	    "Anforderung Dachs Bit Codiert",            ""],
-		[3,"Hka_Bd.UHka_Frei.usFreigabe",	    "Freigabe Dachs Bit Codiert",               ""],
-		[1,"Hka_Bd.ulArbeitElektr",		    "Erzeugte elektrische Arbeit kWh",          "b44a3af10-21ad-11e6-815a-cb474497d58e"],
-		[1,"Hka_Bd.ulArbeitThermHka",		    "Erzeugte thermische Arbeit kWh",           "005837f0-21ae-11e6-8568-1b849bd56c27"],
-		[1,"Hka_Bd.ulArbeitThermKon",		    "Erzeugte thermische Arbeit Kondenser kWh", "29f0ef60-21ae-11e6-a6fb-b10b93766e50"],
-		[1,"Hka_Bd.ulBetriebssekunden",		    "Betriebsstunden Dachs Stunden",            "55749930-12ae-11e6-9aa9-2d1b06fad85e"],
-		[1,"Hka_Bd.ulAnzahlStarts",		    "Anzahl Starts Dachs",                      ""],
-		[1,"Hka_Bd_Stat.uchSeriennummer",	    "Seriennummer 10-stellig",                  ""],
-		[1,"Hka_Bd_Stat.uchTeilenummer",	    "Teilenummer 10-stellig",                   ""],
-		[1,"Hka_Bd_Stat.ulInbetriebnahmedatum",	    "Inbetriebnahme Sekunden seit 1.1.2000",    ""],
-#
-#Betriebsdaten 31.12.
-		[1,"BD3112.Hka_Bd.ulBetriebssekunden",	"31.12:Betriebsstunden Dachs Stunden",            ""],
-		[1,"BD3112.Hka_Bd.ulAnzahlStarts",	"31.12:Anzahl Starts Dachs",                      ""],
-		[1,"BD3112.Hka_Bd.ulArbeitElektr",	"31.12:Erzeugte elektrische Arbeit kWh",          ""],
-		[1,"BD3112.Hka_Bd.ulArbeitThermHka",	"31.12:Erzeugte thermische Arbeit kWh",           ""],
-		[1,"BD3112.Hka_Bd.ulArbeitThermKon",	"31.12:Erzeugte thermische Arbeit Kondenser kWh", ""],
-		[1,"BD3112.Ww_Bd.ulWwMengepA",		"31.12:Warmwassermenge pro Jahr m3",              ""],
-#
-#Daten 2. Warmeerzeuger
-		[1,"Brenner_Bd.bIstStatus",		   "Status des SEplus Flag",                    ""],
-		[1,"Brenner_Bd.bWarnung",		   "Warncode SEplus = Wert + 600",              ""],
-		[4,"Brenner_Bd.UBrenner_Anf.usAnforderung","Anforderung Bit Codiert",                   ""],
-		[4,"Brenner_Bd.UBrenner_Frei.bFreigabe",   "Freigabe Bit Codiert",                      ""],
-		[1,"Brenner_Bd.ulAnzahlStarts",		   "Erzeugte thermische Arbeit kWh",            ""],
-		[1,"Brenner_Bd.ulBetriebssekunden",	   "Erzeugte thermische Arbeit Kondenser kWh",  ""],
-#
-#Hydraulik Schema
-		[1,"Hka_Ew.HydraulikNr.bSpeicherArt",	  "Speicherart",            ""],
-		[1,"Hka_Ew.HydraulikNr.bWW_Art",	  "Brauchwasserbereitung",  ""],
-		[1,"Hka_Ew.HydraulikNr.b2_Waermeerzeuger","2. Waermeerzeuger",      ""],
-		[1,"Hka_Ew.HydraulikNr.bMehrmodul",	  "Mehrmodultechnik",       ""],
-#
-#Temperaturen
-		[1,"Hka_Mw1.Temp.sAbgasHKA",		"Abgastemperatur Dachs C",        "4fb710c0-21aa-11e6-b664-d9a3367711f9"],
-		[1,"Hka_Mw1.Temp.sAbgasMotor",		"Abgastemperatur Motor C",        "8639b840-21aa-11e6-a1f4-95a666850239"],
-		[1,"Hka_Mw1.Temp.sKapsel",		"Kapseltemperatur C",             "a8e19160-21aa-11e6-861a-2d4575dff74c"],
-		[1,"Hka_Mw1.Temp.sbAussen",		"Aussentemperatur C",             "f6945690-21a7-11e6-a657-afdacd3be8ba"],
-		[1,"Hka_Mw1.Temp.sbFreigabeModul",	"Freigabe Modul C",               ""],
-		[1,"Hka_Mw1.Temp.sbFuehler1",		"Temperatur Fuehler 1 (F1) C",    "dad0d4a0-21aa-11e6-75cb-bfb031667d12"],
-		[1,"Hka_Mw1.Temp.sbFuehler2",		"Temperatur Fuehler 2 (F2) C",    "fcf04f20-21aa-11e6-af4a-e155fab6eb1b"],
-		[1,"Hka_Mw1.Temp.sbGen",  		"Dachs Eintrittstemperatur C",    "5bb6cb20-21ab-11e6-86ed-77ef37378af7"],
-		[1,"Hka_Mw1.Temp.sbMotor",		"Kuehlwassertemperatur Motor C",  "82e27440-21ab-11e6-8b73-2761738ed83a"],
-		[1,"Hka_Mw1.Temp.sbRegler",		"Interne Reglertemperatur C",     "9e865c40-21ab-11e6-8cca-19daedb0826e"],
-		[1,"Hka_Mw1.Temp.sbRuecklauf",		"Ruecklauftemperatur C",          "b965b1d0-21ab-11e6-b67b-cbfd5739138e"],
-		[1,"Hka_Mw1.Temp.sbVorlauf",		"Vorlauftemperatur C",            "d6805bb0-21ab-11e6-95d6-55e2efeb7161"],
-		[1,"Hka_Mw1.Temp.sbZS_Fuehler3",	"Temperatur Fuehler 3 (F3) C",    ""],
-		[1,"Hka_Mw1.Temp.sbZS_Fuehler4",	"Temperatur Fuehler 4 (F4) C",    ""],
-		[1,"Hka_Mw1.Temp.sbZS_Vorlauf1",	"Vorlauftemperatur Heizkreis 1 C","fad91320-21ab-11e6-bd6b-578fa070cc2e"],
-		[1,"Hka_Mw1.Temp.sbZS_Vorlauf2",	"Vorlauftemperatur Heizkreis 2 C",""],
-		[1,"Hka_Mw1.Temp.sbZS_Warmwasser",	"Temperatur Warmwasser C",        ""],
-		[1,"Hka_Mw1.Solltemp.sbRuecklauf",	"Solltemperatur Ruecklauf C",     ""],
-		[1,"Hka_Mw1.Solltemp.sbVorlauf",	"Solltemperatur Vorlauf C",       ""],
-#
-#Aktoren
-		[1,"Hka_Mw1.Aktor.bWwPumpe",		"Brauchwasserladepumpe %",            ""],
-		[1,"Hka_Mw1.Aktor.fFreiAltWaerm",	"Freigabe Waermeerzeuger Flag",       ""],
-		[1,"Hka_Mw1.Aktor.fMischer1Auf",	"Mischer 1 Auf Flag",                 ""],
-		[1,"Hka_Mw1.Aktor.fMischer1Zu",		"Mischer 1 Zu Flag",                  ""],
-		[1,"Hka_Mw1.Aktor.fMischer2Auf",	"Mischer 2 Auf Flag",                 ""],
-		[1,"Hka_Mw1.Aktor.fMischer2Zu",		"Mischer 2 Zu Flag",                  ""],
-		[1,"Hka_Mw1.Aktor.fProgAus1",		"Programmierbarer Ausgang 1 Flag",    ""],
-		[1,"Hka_Mw1.Aktor.fProgAus2",		"Programmierbarer Ausgang 2 Flag",    ""],
-		[1,"Hka_Mw1.Aktor.fProgAus3",		"Programmierbarer Ausgang 2 Flag",    ""],
-		[1,"Hka_Mw1.Aktor.fStoerung",		"Relais Stoerung Flag",               ""],
-		[1,"Hka_Mw1.Aktor.fUPHeizkreis1",	"Pumpe Heizkreis 1 Flag",             "44e3e260-21dd-11e6-87c0-0fa390803568"],
-		[1,"Hka_Mw1.Aktor.fUPHeizkreis2",	"Pumpe Heizkreis 2 Flag",             ""],
-		[1,"Hka_Mw1.Aktor.fUPKuehlung",		"Interne Umwaelzpumpe Flag",          "753fba20-21dd-11e6-b3a8-6729e70303ef"],
-		[1,"Hka_Mw1.Aktor.fUPVordruck",		"UP Vordruck Flag",                   ""],
-		[1,"Hka_Mw1.Aktor.fUPZirkulation",	"Zirkulationspumpe Flag",             ""],
-		[1,"Hka_Mw1.Aktor.fWartung",		"Relais Wartung Flag",                ""],
-		[1,"Hka_Mw1.sWirkleistung",		"Aktuelle Wirkleistung _,_ _ kW",     "d73663e0-21ac-11e6-a0dc-23fd7dab6c31"],
-		[1,"Hka_Mw1.ulMotorlaufsekunden",	"Motorlaufzeit seit Start Sekunden",  ""],
-		[1,"Hka_Mw1.usDrehzahl",		"Motordrehzahl U/min",                ""],
-#
-#Tageslauf
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[0]", "15 Minuten Raster 2-4 Uhr Bit Codiert *",  ""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[1]", "15 Minuten Raster 4-6 Uhr Bit Codiert *",  ""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[2]", "15 Minuten Raster 6-8 Uhr Bit Codiert *",  ""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[3]", "15 Minuten Raster 8-10 Uhr Bit Codiert *", ""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[4]", "15 Minuten Raster 10-12 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[5]", "15 Minuten Raster 12-14 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[6]", "15 Minuten Raster 14-16 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[7]", "15 Minuten Raster 16-18 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[8]", "15 Minuten Raster 18-20 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[9]", "15 Minuten Raster 20-22 Uhr Bit Codiert *",""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[10]","15 Minuten Raster 22-0 Uhr Bit Codiert *", ""],
-		[2,"Laufraster15Min_aktTag.bDoppelstunde[11]","15 Minuten Raster 0-2 Uhr Bit Codiert *",  ""],
-#
-#* Beispiel:
-#		               02:00   03:00   04:00
-#               bDoppelstunde[0] 1 1 0 0 | 0 1 1 0
-#
-# Informationen ueber Wartung
-		[1,"Wartung_Cache.fStehtAn",		 "Status Wartung Flag",                 ""],
-		[1,"Wartung_Cache.ulBetriebssekundenBei","Betriebsstunden der letzten Wartung", ""],
-		[1,"Wartung_Cache.ulZeitstempel",	 "letzte Wartung Sek seit 1.1.2000",    ""],
-		[1,"Wartung_Cache.usIntervall",		 "Wartungsintervall Betriebsstunden",   ""]
-)
 
 # ---------------------------------------------------------
-# Функции
+# Сбор активных записей по секторам
+# возвращаем список кортежей: (entry, sector_name)
 # ---------------------------------------------------------
-def read_dachs_value(key):
-    url = DACHS_URL + key + DACHS_URL_END
-    try:
-        r = requests.get(url, auth=(DACHS_USER, DACHS_PASS), timeout=5)
-        raw = r.content.decode("utf-8")
-        if "=" not in raw:
-            print(f"[WARN] Unexpected response for {key}: {raw}")
-            return None
-        return raw.split("=")[1].strip()
-    except Exception as e:
-        print(f"[ERROR] HTTP error for {key}: {e}")
-        return None
+def build_entries(options):
+    sectors_cfg = options.get("sectors", {})
+    entries = []
+
+    for sector_name, enabled in sectors_cfg.items():
+        if enabled:
+            sector = SECTORS.get(sector_name, [])
+            for entry in sector:
+                entries.append((entry, sector_name))
+
+    return entries
 
 
-def format_value(raw, fmt):
-    if raw is None:
-        return None
-
-    if raw == "true":
-        return "1"
-    if raw == "false":
-        return "0"
-
-    try:
-        val = int(raw)
-    except:
-        return raw
-
-    if fmt == 1:
-        return str(val)
-    elif fmt == 2:
-        return "{:08b}".format(val)
-    elif fmt == 3:
-        return "{:04x}".format(val)
-    elif fmt == 4:
-        return "{:02x}".format(val)
-
-    return raw
+# ---------------------------------------------------------
+# Нормализация имени → entity_id
+# ---------------------------------------------------------
+def normalize_entity_id(name: str) -> str:
+    s = name.lower()
+    for ch in [" ", "%", ",", ".", "ä", "ö", "ü", "ß", ":", "/", "(", ")", "-", "[", "]"]:
+        s = s.replace(ch, "_")
+    while "__" in s:
+        s = s.replace("__", "_")
+    return s.strip("_")
 
 
-def publish_discovery(client, key, desc):
-    sensor_id = key.replace(".", "_")
-    topic = f"homeassistant/sensor/dachs/{sensor_id}/config"
+# ---------------------------------------------------------
+# Определение типа сущности (sensor / binary_sensor / switch / number)
+# и параметров для SCADA‑friendly группировки
+# ---------------------------------------------------------
+def classify_entity(entry, sector_name):
+    dtype = entry[0]
+    key = entry[1]
+    name = entry[2]
+
+    # По умолчанию – обычный sensor
+    entity_kind = "sensor"
+    device_class = None
+    state_class = None
+    unit = None
+
+    # Простейшая типизация по ключу
+    if "Temp" in key or "temp" in key:
+        entity_kind = "sensor"
+        device_class = "temperature"
+        unit = "°C"
+        state_class = "measurement"
+
+    elif "Wirkleistung" in key or "Leistung" in key:
+        entity_kind = "sensor"
+        device_class = "power"
+        unit = "kW"
+        state_class = "measurement"
+
+    elif "Arbeit" in key:
+        entity_kind = "sensor"
+        device_class = "energy"
+        unit = "kWh"
+        state_class = "total_increasing"
+
+    elif "Betriebssekunden" in key:
+        entity_kind = "sensor"
+        device_class = "duration"
+        unit = "s"
+        state_class = "total_increasing"
+
+    # Bitmask / Flags → binary_sensor или switch
+    # dtype 3/4 – битовые/флаговые значения
+    if dtype in (3, 4):
+        # Aktoren → switch
+        if ".Aktor." in key or "ProgAus" in key:
+            entity_kind = "switch"
+        else:
+            entity_kind = "binary_sensor"
+
+    # Некоторые явные флаги → binary_sensor
+    if key.endswith(".fStoerung") or key.endswith(".bStoerung") or "Warnung" in key:
+        entity_kind = "binary_sensor"
+        device_class = "problem"
+
+    if "Wartung_Cache.fStehtAn" in key:
+        entity_kind = "binary_sensor"
+        device_class = "problem"
+
+    # SCADA‑friendly: группируем по сектору через device.name
+    device_name = f"Dachs – {sector_name}"
+
+    return {
+        "entity_kind": entity_kind,
+        "device_class": device_class,
+        "state_class": state_class,
+        "unit": unit,
+        "device_name": device_name,
+    }
+
+
+# ---------------------------------------------------------
+# Публикация MQTT Discovery
+# ---------------------------------------------------------
+def publish_discovery(client, base_topic, entry, sector_name):
+    dtype = entry[0]
+    key = entry[1]
+    name = entry[2]
+    uuid = entry[3]
+
+    classification = classify_entity(entry, sector_name)
+    entity_kind = classification["entity_kind"]
+    device_class = classification["device_class"]
+    state_class = classification["state_class"]
+    unit = classification["unit"]
+    device_name = classification["device_name"]
+
+    # entity_id: включаем сектор для SCADA‑группировки
+    entity_id = normalize_entity_id(f"{sector_name}_{name}")
+
+    # unique_id
+    if uuid:
+        unique_id = uuid
+    else:
+        unique_id = f"dachs_{normalize_entity_id(key)}"
+
+    state_topic = f"{base_topic}/{key}"
 
     payload = {
-        "name": f"Dachs {key}",
-        "state_topic": f"{TOPIC_PREFIX}/{key.replace('.', '/')}",
-        "unique_id": f"dachs_{sensor_id}",
+        "name": name,
+        "unique_id": unique_id,
+        "state_topic": state_topic,
         "device": {
-            "identifiers": ["dachs_system"],
-            "name": "Dachs",
-            "manufacturer": "Senertec"
-        }
+            "identifiers": ["dachs_mqtt"],
+            "name": device_name,
+            "manufacturer": "SenerTec",
+            "model": "Dachs",
+        },
     }
+
+    if device_class:
+        payload["device_class"] = device_class
+    if state_class:
+        payload["state_class"] = state_class
+    if unit:
+        payload["unit_of_measurement"] = unit
+
+    # Выбор discovery‑топика по типу сущности
+    if entity_kind == "sensor":
+        topic = f"homeassistant/sensor/{entity_id}/config"
+    elif entity_kind == "binary_sensor":
+        topic = f"homeassistant/binary_sensor/{entity_id}/config"
+    elif entity_kind == "switch":
+        topic = f"homeassistant/switch/{entity_id}/config"
+        # Для switch нужно добавить command_topic, но у нас пока только чтение
+        # поэтому оставляем как read‑only sensor‑style switch
+    elif entity_kind == "number":
+        topic = f"homeassistant/number/{entity_id}/config"
+    else:
+        topic = f"homeassistant/sensor/{entity_id}/config"
 
     client.publish(topic, json.dumps(payload), retain=True)
 
 
 # ---------------------------------------------------------
-# Современный MQTT-клиент (Callback API v2)
+# Основной цикл аддона
 # ---------------------------------------------------------
-def create_mqtt_client():
-    client = mqtt.Client(
-        client_id="dachs_mqtt_bridge",
-        protocol=mqtt.MQTTv311,
-        transport="tcp",
-        callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-    )
+def main():
+    options = load_options()
 
-    if MQTT_USER:
-        client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+    host = options["host"]
+    port = options["port"]
+    base_topic = options.get("base_topic", "dachs")
 
-    return client
+    mqtt_host = options["mqtt_host"]
+    mqtt_port = options["mqtt_port"]
+    mqtt_user = options.get("mqtt_user") or None
+    mqtt_password = options.get("mqtt_password") or None
 
+    # Собираем активные записи (entry, sector_name)
+    entries = build_entries(options)
+    _LOGGER.info("Aktive Schlüssel: %d", len(entries))
 
-def connect_mqtt():
-    client = create_mqtt_client()
+    # MQTT клиент
+    client = mqtt.Client()
+    if mqtt_user:
+        client.username_pw_set(mqtt_user, mqtt_password)
+    client.connect(mqtt_host, mqtt_port, 60)
+    client.loop_start()
 
+    session = requests.Session()
+
+    # MQTT Discovery – один раз при старте
+    for entry, sector_name in entries:
+        publish_discovery(client, base_topic, entry, sector_name)
+
+    _LOGGER.info("MQTT Discovery published for %d entities", len(entries))
+
+    # Основной цикл опроса
     while True:
-        try:
-            client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
-            client.loop_start()
-            print("[INFO] Connected to MQTT")
-            return client
-        except Exception as e:
-            print(f"[ERROR] MQTT connect failed: {e}, retry in 10s")
-            time.sleep(10)
+        for entry, sector_name in entries:
+            dtype = entry[0]
+            key = entry[1]
+            name = entry[2]  # ЧЕЛОВЕЧЕСКОЕ НАЗВАНИЕ
 
-
-# ---------------------------------------------------------
-# Основной watchdog‑цикл
-# ---------------------------------------------------------
-print("Starting Dachs → MQTT bridge with watchdog...")
-
-mqtt_client = connect_mqtt()
-
-def publish_all_discovery():
-    for fmt, key, desc, uuid in ZumDachs:
-        publish_discovery(mqtt_client, key, desc)
-    print("[INFO] MQTT Discovery published for all registers.")
-
-publish_all_discovery()
-
-while True:
-    try:
-        loop_start = time.time()
-
-        for fmt, key, desc, uuid in ZumDachs:
-            raw = read_dachs_value(key)
-            value = format_value(raw, fmt)
-
-            if value is None:
+            try:
+                url = f"http://{host}:{port}/getKey"
+                resp = session.get(url, params={"k": key}, timeout=5)
+                resp.raise_for_status()
+                value_raw = resp.text.strip()
+            except Exception as e:
+                _LOGGER.error("HTTP Fehler für %s: %s", key, e)
                 continue
 
-            topic = f"{TOPIC_PREFIX}/{key.replace('.', '/')}"
-            mqtt_client.publish(topic, value, retain=True)
+            # Простая обработка типов
+            value = value_raw
+            try:
+                if dtype == 1:
+                    # числовые значения
+                    if value_raw != "":
+                        value = float(value_raw.replace(",", "."))
+                elif dtype in (3, 4):
+                    # битовые / флаговые – оставляем как есть (0/1 или маска)
+                    pass
+                elif dtype == 2:
+                    # Tageslauf – битовая маска, можно позже декодировать
+                    pass
+            except Exception:
+                # если не получилось преобразовать – отправляем как строку
+                value = value_raw
 
-        elapsed = time.time() - loop_start
-        sleep_time = max(1, INTERVAL - elapsed)
-        time.sleep(sleep_time)
+            topic = f"{base_topic}/{key}"
+            client.publish(topic, payload=value, retain=False)
 
-    except Exception as e:
-        print(f"[FATAL] Unexpected error in main loop: {e}")
+        time.sleep(10)
 
-        try:
-            mqtt_client.loop_stop()
-        except:
-            pass
 
-        mqtt_client = connect_mqtt()
-        publish_all_discovery()
-        print("[INFO] Watchdog: recovered from error, continuing...")
-        time.sleep(5)
+if __name__ == "__main__":
+    main()

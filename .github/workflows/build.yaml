@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, aarch64, i386]
+        arch: [amd64, aarch64, armhf, i386]
 
     steps:
       - name: Checkout
@@ -36,8 +36,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
-          context: ./dachs_mqtt
-          file: ./dachs_mqtt/Dockerfile
+          context: .
+          file: ./Dockerfile
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
