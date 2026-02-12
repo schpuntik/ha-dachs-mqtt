@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/hassio-addons/base-python:3.11
+ARG BUILD_FROM=ghcr.io/home-assistant/{arch}-base-python:3.12
 FROM ${BUILD_FROM}
 
 ENV PYTHONUNBUFFERED=1
