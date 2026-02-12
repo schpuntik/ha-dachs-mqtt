@@ -9,7 +9,7 @@ host_network: true
 arch:
   - amd64
   - aarch64
-  - amrhf
+  - armhf
   - i386
 
 options:
@@ -40,7 +40,7 @@ options:
 schema:
   dachs_host: str
   dachs_user: str
-  dachs_password: str
+  dachs_password: str?
 
   mqtt_host: str
   mqtt_port: int
