@@ -9,8 +9,9 @@ host_network: true
 arch:
   - amd64
   - aarch64
-  - armv7
   - i386
+  - armhf
+  - armv7
 
 options:
   dachs_host: 192.168.178.77
