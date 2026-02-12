@@ -10,8 +10,7 @@ COPY run.sh /run.sh
 
 RUN chmod a+x /run.sh
 
-# Если Python уже есть — ничего не делаем
-# Если Python нет — устанавливаем
+# Устанавливаем Python, если его нет в образе
 RUN if ! command -v python3 >/dev/null 2>&1; then \
         apk add --no-cache python3 py3-pip; \
     fi

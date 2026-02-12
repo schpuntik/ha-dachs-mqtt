@@ -41,9 +41,8 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           build-args: |
-            BUILD_FROM=${{ matrix.arch == 'amd64' && 'ghcr.io/home-assistant/amd64-base-python:3.12' ||
-                            matrix.arch == 'aarch64' && 'ghcr.io/home-assistant/aarch64-base-python:3.12' ||
-                            format('ghcr.io/home-assistant/{0}-base:3.19', matrix.arch) }}
+            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:3.19
+
 
           tags: |
             ghcr.io/${{ github.repository }}/dachs_mqtt-${{ matrix.arch }}:${{ env.VERSION }}
