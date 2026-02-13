@@ -5,7 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /usr/src/app
 
+# Копируем Python‑пакет
 COPY dachs_mqtt/ ./dachs_mqtt/
+
+# Копируем сервисы s6
 COPY run.sh /run.sh
 COPY service/run /etc/services.d/dachs/run
 

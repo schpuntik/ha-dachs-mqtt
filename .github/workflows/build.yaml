@@ -37,7 +37,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./dachs_mqtt/Dockerfile
+          file: ./addon-dachs/Dockerfile
           platforms: linux/${{ matrix.arch }}
           push: true
           build-args: |
