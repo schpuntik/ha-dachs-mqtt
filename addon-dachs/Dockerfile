@@ -5,12 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /usr/src/app
 
-# Копируем Python‑пакет
-COPY dachs_mqtt/ ./dachs_mqtt/
 
-# Копируем сервисы s6
-COPY run.sh /run.sh
-COPY service/run /etc/services.d/dachs/run
+COPY addon-dachs/dachs_mqtt/ ./dachs_mqtt/
+COPY addon-dachs/run.sh /run.sh
+COPY addon-dachs/service/run /etc/services.d/dachs/run
 
 RUN chmod +x /run.sh \
     && chmod +x /etc/services.d/dachs/run \

@@ -1,5 +1,5 @@
 name: Dachs MQTT Bridge
-version: "1.0.10"
+version: "1.0.11"
 slug: dachs_mqtt
 description: Reads Dachs values and publishes them to MQTT with HA Discovery
 startup: services
