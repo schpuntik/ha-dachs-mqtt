@@ -20,6 +20,7 @@ DEFAULT_OPTIONS = {
     "interval": 10,
 
     "dachs_host": "localhost",
+    "dachs_port": 8080,   # ← ПО УМОЛЧАНИЮ 8080
     "dachs_user": "",
     "dachs_password": "",
     "base_topic": "dachs",
@@ -27,9 +28,6 @@ DEFAULT_OPTIONS = {
 }
 
 
-# ---------------------------------------------------------
-# Загрузка конфигурации аддона
-# ---------------------------------------------------------
 def load_options():
     if not OPTIONS_PATH.exists():
         print("options.json not found — creating default config")
@@ -42,9 +40,6 @@ def load_options():
         return json.load(f)
 
 
-# ---------------------------------------------------------
-# Очистка MQTT-топиков и имён
-# ---------------------------------------------------------
 def sanitize_topic(s: str) -> str:
     return s.replace("#", "_").replace("+", "_")
 
@@ -53,9 +48,6 @@ def sanitize_name(s: str) -> str:
     return s.replace("#", "").replace("+", "")
 
 
-# ---------------------------------------------------------
-# Сбор активных записей
-# ---------------------------------------------------------
 def build_entries(options):
     sectors_cfg = options.get("sectors", {})
     entries = []
@@ -69,9 +61,6 @@ def build_entries(options):
     return entries
 
 
-# ---------------------------------------------------------
-# Нормализация имени → entity_id
-# ---------------------------------------------------------
 def normalize_entity_id(name: str) -> str:
     s = name.lower()
     for ch in [" ", "%", ",", ".", "ä", "ö", "ü", "ß", ":", "/", "(", ")", "-", "[", "]"]:
@@ -81,9 +70,6 @@ def normalize_entity_id(name: str) -> str:
     return s.strip("_")
 
 
-# ---------------------------------------------------------
-# Классификация сущности
-# ---------------------------------------------------------
 def classify_entity(entry, sector_name):
     dtype = entry[0]
     key = entry[1]
@@ -144,9 +130,6 @@ def classify_entity(entry, sector_name):
     }
 
 
-# ---------------------------------------------------------
-# Публикация MQTT Discovery
-# ---------------------------------------------------------
 def publish_discovery(client, base_topic, entry, sector_name):
     dtype, key, name2, uuid = entry
 
@@ -157,9 +140,7 @@ def publish_discovery(client, base_topic, entry, sector_name):
     unit = classification["unit"]
     device_name = classification["device_name"]
 
-    # ← ИМЯ СЕНСОРА ИЗ 2 ПОЛЯ
     name = sanitize_name(classification["name"])
-
     entity_id = normalize_entity_id(f"{sector_name}_{name}")
 
     safe_key = sanitize_topic(key)
@@ -198,13 +179,11 @@ def publish_discovery(client, base_topic, entry, sector_name):
     client.publish(topic, json.dumps(payload), retain=True)
 
 
-# ---------------------------------------------------------
-# Основной цикл
-# ---------------------------------------------------------
 def main():
     options = load_options()
 
     host = options["dachs_host"]
+    port = options.get("dachs_port", 8080)  # ← НОВОЕ
     user = options["dachs_user"]
     password = options.get("dachs_password", "")
     base_topic = options.get("base_topic", "dachs")
@@ -236,7 +215,7 @@ def main():
             safe_key = sanitize_topic(key)
 
             try:
-                url = f"http://{host}/getKey"
+                url = f"http://{host}:{port}/getKey"
                 resp = session.get(url, params={"k": key}, timeout=5)
                 resp.raise_for_status()
                 value_raw = resp.text.strip()
