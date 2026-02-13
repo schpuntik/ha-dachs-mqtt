@@ -12,6 +12,7 @@ _LOGGER = logging.getLogger("dachs_mqtt")
 
 OPTIONS_PATH = Path("/data/options.json")
 
+# Default addon configuration
 DEFAULT_OPTIONS = {
     "mqtt_host": "localhost",
     "mqtt_port": 1883,
@@ -20,7 +21,7 @@ DEFAULT_OPTIONS = {
     "interval": 10,
 
     "dachs_host": "localhost",
-    "dachs_port": 8080,   # default port
+    "dachs_port": 8080,   # default API port
     "dachs_user": "",
     "dachs_password": "",
     "base_topic": "dachs",
@@ -28,12 +29,9 @@ DEFAULT_OPTIONS = {
 }
 
 
-# ---------------------------------------------------------
-# Load config
-# ---------------------------------------------------------
+# Load addon options
 def load_options():
     if not OPTIONS_PATH.exists():
-        print("options.json not found — creating default config")
         OPTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
         with OPTIONS_PATH.open("w", encoding="utf-8") as f:
             json.dump(DEFAULT_OPTIONS, f, indent=2)
@@ -43,36 +41,30 @@ def load_options():
         return json.load(f)
 
 
-# ---------------------------------------------------------
-# Sanitizers
-# ---------------------------------------------------------
+# Sanitize MQTT topic
 def sanitize_topic(s: str) -> str:
     return s.replace("#", "_").replace("+", "_")
 
 
+# Sanitize HA-friendly name
 def sanitize_name(s: str) -> str:
     return s.replace("#", "").replace("+", "")
 
 
-# ---------------------------------------------------------
-# Build active entries
-# ---------------------------------------------------------
+# Build list of active sector entries
 def build_entries(options):
     sectors_cfg = options.get("sectors", {})
     entries = []
 
     for sector_name, enabled in sectors_cfg.items():
         if enabled:
-            sector = SECTORS.get(sector_name, [])
-            for entry in sector:
+            for entry in SECTORS.get(sector_name, []):
                 entries.append((entry, sector_name))
 
     return entries
 
 
-# ---------------------------------------------------------
-# Normalize entity_id
-# ---------------------------------------------------------
+# Normalize entity_id for HA
 def normalize_entity_id(name: str) -> str:
     s = name.lower()
     for ch in [" ", "%", ",", ".", "ä", "ö", "ü", "ß", ":", "/", "(", ")", "-", "[", "]"]:
@@ -82,19 +74,18 @@ def normalize_entity_id(name: str) -> str:
     return s.strip("_")
 
 
-# ---------------------------------------------------------
-# Entity classification
-# ---------------------------------------------------------
+# Classify entity for HA Discovery
 def classify_entity(entry, sector_name):
     dtype = entry[0]
     key = entry[1]
-    name = entry[1]  # sensor name from 2nd field
+    name = entry[1]
 
     entity_kind = "sensor"
     device_class = None
     state_class = None
     unit = None
 
+    # Basic type classification
     if "Temp" in key or "temp" in key:
         entity_kind = "sensor"
         device_class = "temperature"
@@ -119,12 +110,14 @@ def classify_entity(entry, sector_name):
         unit = "s"
         state_class = "total_increasing"
 
+    # Binary/switch classification
     if dtype in (3, 4):
         if ".Aktor." in key or "ProgAus" in key:
             entity_kind = "switch"
         else:
             entity_kind = "binary_sensor"
 
+    # Fault/warning classification
     if key.endswith(".fStoerung") or key.endswith(".bStoerung") or "Warnung" in key:
         entity_kind = "binary_sensor"
         device_class = "problem"
@@ -145,20 +138,18 @@ def classify_entity(entry, sector_name):
     }
 
 
-# ---------------------------------------------------------
-# Publish MQTT Discovery
-# ---------------------------------------------------------
+# Publish HA MQTT Discovery config
 def publish_discovery(client, base_topic, entry, sector_name):
     dtype, key, name2, uuid = entry
 
-    classification = classify_entity(entry, sector_name)
-    entity_kind = classification["entity_kind"]
-    device_class = classification["device_class"]
-    state_class = classification["state_class"]
-    unit = classification["unit"]
-    device_name = classification["device_name"]
+    c = classify_entity(entry, sector_name)
+    entity_kind = c["entity_kind"]
+    device_class = c["device_class"]
+    state_class = c["state_class"]
+    unit = c["unit"]
+    device_name = c["device_name"]
 
-    name = sanitize_name(classification["name"])
+    name = sanitize_name(c["name"])
     entity_id = normalize_entity_id(f"{sector_name}_{name}")
 
     safe_key = sanitize_topic(key)
@@ -178,6 +169,7 @@ def publish_discovery(client, base_topic, entry, sector_name):
         },
     }
 
+    # Optional HA fields
     if device_class:
         payload["device_class"] = device_class
     if state_class:
@@ -185,6 +177,7 @@ def publish_discovery(client, base_topic, entry, sector_name):
     if unit:
         payload["unit_of_measurement"] = unit
 
+    # Select HA component
     if entity_kind == "sensor":
         topic = f"homeassistant/sensor/{entity_id}/config"
     elif entity_kind == "binary_sensor":
@@ -197,12 +190,9 @@ def publish_discovery(client, base_topic, entry, sector_name):
     client.publish(topic, json.dumps(payload), retain=True)
 
 
-# ---------------------------------------------------------
-# Pre‑start Dachs connection test
-# ---------------------------------------------------------
+# Check Dachs API availability
 def check_dachs_connection(session, host, port, user, password):
-    """Проверяет доступность Dachs и корректность авторизации."""
-    test_key = "Hka_Mw1.Temp.sbZS_Vorlauf2"  # любой существующий ключ
+    test_key = "Hka_Mw1.Temp.sbZS_Vorlauf2"
     url = f"http://{host}:{port}/getKey"
 
     try:
@@ -214,21 +204,19 @@ def check_dachs_connection(session, host, port, user, password):
         )
 
         if resp.status_code == 401:
-            _LOGGER.error("Dachs API отклонил авторизацию (401 Unauthorized). Проверьте логин/пароль.")
+            _LOGGER.error("Dachs API rejected authentication (401).")
             return False
 
         resp.raise_for_status()
-        _LOGGER.info("Авторизация успешна — соединение с Dachs установлено.")
+        _LOGGER.info("Authorization successful — Dachs reachable.")
         return True
 
     except Exception as e:
-        _LOGGER.error("Не удалось подключиться к Dachs (%s:%s): %s", host, port, e)
+        _LOGGER.error("Unable to reach Dachs (%s:%s): %s", host, port, e)
         return False
 
 
-# ---------------------------------------------------------
 # Main loop
-# ---------------------------------------------------------
 def main():
     options = load_options()
 
@@ -244,8 +232,9 @@ def main():
     mqtt_password = options.get("mqtt_password") or None
 
     entries = build_entries(options)
-    _LOGGER.info("Aktive Schlüssel: %d", len(entries))
+    _LOGGER.info("Active keys: %d", len(entries))
 
+    # MQTT client setup
     client = mqtt.Client()
     if mqtt_user:
         client.username_pw_set(mqtt_user, mqtt_password)
@@ -254,16 +243,16 @@ def main():
 
     session = requests.Session()
 
-    # Pre‑start connection test
+    # Pre-start API check
     check_dachs_connection(session, host, port, user, password)
 
-    # Publish discovery
+    # Publish HA Discovery
     for entry, sector_name in entries:
         publish_discovery(client, base_topic, entry, sector_name)
 
     _LOGGER.info("MQTT Discovery published for %d entities", len(entries))
 
-    # Main loop
+    # Main update loop
     while True:
         for entry, sector_name in entries:
             dtype, key, name2, uuid = entry
@@ -279,10 +268,17 @@ def main():
                 )
                 resp.raise_for_status()
                 value_raw = resp.text.strip()
+
+                # Extract clean value from "key=value"
+                if "=" in value_raw:
+                    _, value_raw = value_raw.split("=", 1)
+                    value_raw = value_raw.strip()
+
             except Exception as e:
-                _LOGGER.error("HTTP Fehler für %s: %s", key, e)
+                _LOGGER.error("HTTP error for %s: %s", key, e)
                 continue
 
+            # Convert numeric values
             value = value_raw
             try:
                 if dtype == 1 and value_raw != "":
@@ -290,6 +286,7 @@ def main():
             except Exception:
                 value = value_raw
 
+            # Publish state
             topic = f"{base_topic}/{safe_key}"
             client.publish(topic, payload=value, retain=False)
 
