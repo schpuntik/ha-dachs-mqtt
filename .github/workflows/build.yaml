@@ -15,6 +15,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
+      - name: Debug workspace
+        run: |
+            echo "Workspace content:"
+            ls -R .
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -33,6 +39,10 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
+      - name: Remove old builders
+        run: docker buildx rm default || true
+
+
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
@@ -42,8 +52,6 @@ jobs:
           push: true
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:3.19
-
-
           tags: |
             ghcr.io/${{ github.repository }}/dachs_mqtt-${{ matrix.arch }}:${{ env.VERSION }}
             ghcr.io/${{ github.repository }}/dachs_mqtt-${{ matrix.arch }}:latest
