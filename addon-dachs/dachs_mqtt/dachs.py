@@ -43,10 +43,14 @@ def load_options():
 
 
 # ---------------------------------------------------------
-# Нормализация MQTT-топиков
+# Очистка MQTT-топиков и имён
 # ---------------------------------------------------------
 def sanitize_topic(s: str) -> str:
     return s.replace("#", "_").replace("+", "_")
+
+
+def sanitize_name(s: str) -> str:
+    return s.replace("#", "").replace("+", "")
 
 
 # ---------------------------------------------------------
@@ -83,7 +87,7 @@ def normalize_entity_id(name: str) -> str:
 def classify_entity(entry, sector_name):
     dtype = entry[0]
     key = entry[1]
-    name = entry[2]
+    name = entry[1]  # ← ИМЯ СЕНСОРА ИЗ 2 ПОЛЯ
 
     entity_kind = "sensor"
     device_class = None
@@ -136,6 +140,7 @@ def classify_entity(entry, sector_name):
         "state_class": state_class,
         "unit": unit,
         "device_name": device_name,
+        "name": name,
     }
 
 
@@ -143,7 +148,7 @@ def classify_entity(entry, sector_name):
 # Публикация MQTT Discovery
 # ---------------------------------------------------------
 def publish_discovery(client, base_topic, entry, sector_name):
-    dtype, key, name, uuid = entry
+    dtype, key, name2, uuid = entry
 
     classification = classify_entity(entry, sector_name)
     entity_kind = classification["entity_kind"]
@@ -152,7 +157,9 @@ def publish_discovery(client, base_topic, entry, sector_name):
     unit = classification["unit"]
     device_name = classification["device_name"]
 
-    # ВОЗВРАЩАЕМ НАЗВАНИЕ СЕНСОРА ИЗ 3 ПОЛЯ
+    # ← ИМЯ СЕНСОРА ИЗ 2 ПОЛЯ
+    name = sanitize_name(classification["name"])
+
     entity_id = normalize_entity_id(f"{sector_name}_{name}")
 
     safe_key = sanitize_topic(key)
@@ -161,7 +168,7 @@ def publish_discovery(client, base_topic, entry, sector_name):
     unique_id = uuid if uuid else f"dachs_{normalize_entity_id(key)}"
 
     payload = {
-        "name": name,  # ← ВОТ ЗДЕСЬ ВОЗВРАЩЕНО ПОЛЕ 3
+        "name": name,
         "unique_id": unique_id,
         "state_topic": state_topic,
         "device": {
@@ -225,7 +232,7 @@ def main():
 
     while True:
         for entry, sector_name in entries:
-            dtype, key, name, uuid = entry
+            dtype, key, name2, uuid = entry
             safe_key = sanitize_topic(key)
 
             try:
