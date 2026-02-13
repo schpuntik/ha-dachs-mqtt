@@ -1,21 +1,21 @@
-ARG BUILD_FROM
+ARG BUILD_FROM=ghcr.io/hassio-addons/base-python:13.2.1
 FROM ${BUILD_FROM}
 
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH="/usr/src/app"
+# Устанавливаем зависимости
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-requests \
+    py3-paho-mqtt
 
+# Копируем код аддона
+COPY dachs_mqtt /usr/src/app/dachs_mqtt
+
+# Устанавливаем рабочую директорию
 WORKDIR /usr/src/app
 
-# Копируем Python‑пакет
-COPY addon-dachs/dachs_mqtt/ ./dachs_mqtt/
+# Устанавливаем зависимости Python (если есть requirements.txt)
+# RUN pip install -r requirements.txt
 
-# Копируем сервисы s6
-COPY addon-dachs/run.sh /run.sh
-COPY addon-dachs/service/run /etc/services.d/dachs/run
-
-RUN chmod +x /run.sh \
-    && chmod +x /etc/services.d/dachs/run \
-    && if ! command -v python3 >/dev/null 2>&1; then \
-         apk add --no-cache python3 py3-pip; \
-       fi \
-    && pip3 install --no-cache-dir --break-system-packages -r dachs_mqtt/requirements.txt
+# Команда запуска (без s6!)
+CMD ["python3", "-m", "dachs_mqtt.dachs"]
