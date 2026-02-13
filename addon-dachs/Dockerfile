@@ -2,11 +2,14 @@ ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH="/usr/src/app"
 
 WORKDIR /usr/src/app
 
-
+# Копируем Python‑пакет
 COPY addon-dachs/dachs_mqtt/ ./dachs_mqtt/
+
+# Копируем сервисы s6
 COPY addon-dachs/run.sh /run.sh
 COPY addon-dachs/service/run /etc/services.d/dachs/run
 
