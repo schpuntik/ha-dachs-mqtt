@@ -20,7 +20,7 @@ DEFAULT_OPTIONS = {
     "interval": 10,
 
     "dachs_host": "localhost",
-    "dachs_port": 8080,   # ← ПО УМОЛЧАНИЮ 8080
+    "dachs_port": 8080,   # default port
     "dachs_user": "",
     "dachs_password": "",
     "base_topic": "dachs",
@@ -28,6 +28,9 @@ DEFAULT_OPTIONS = {
 }
 
 
+# ---------------------------------------------------------
+# Load config
+# ---------------------------------------------------------
 def load_options():
     if not OPTIONS_PATH.exists():
         print("options.json not found — creating default config")
@@ -40,6 +43,9 @@ def load_options():
         return json.load(f)
 
 
+# ---------------------------------------------------------
+# Sanitizers
+# ---------------------------------------------------------
 def sanitize_topic(s: str) -> str:
     return s.replace("#", "_").replace("+", "_")
 
@@ -48,6 +54,9 @@ def sanitize_name(s: str) -> str:
     return s.replace("#", "").replace("+", "")
 
 
+# ---------------------------------------------------------
+# Build active entries
+# ---------------------------------------------------------
 def build_entries(options):
     sectors_cfg = options.get("sectors", {})
     entries = []
@@ -61,6 +70,9 @@ def build_entries(options):
     return entries
 
 
+# ---------------------------------------------------------
+# Normalize entity_id
+# ---------------------------------------------------------
 def normalize_entity_id(name: str) -> str:
     s = name.lower()
     for ch in [" ", "%", ",", ".", "ä", "ö", "ü", "ß", ":", "/", "(", ")", "-", "[", "]"]:
@@ -70,10 +82,13 @@ def normalize_entity_id(name: str) -> str:
     return s.strip("_")
 
 
+# ---------------------------------------------------------
+# Entity classification
+# ---------------------------------------------------------
 def classify_entity(entry, sector_name):
     dtype = entry[0]
     key = entry[1]
-    name = entry[1]  # ← ИМЯ СЕНСОРА ИЗ 2 ПОЛЯ
+    name = entry[1]  # sensor name from 2nd field
 
     entity_kind = "sensor"
     device_class = None
@@ -130,6 +145,9 @@ def classify_entity(entry, sector_name):
     }
 
 
+# ---------------------------------------------------------
+# Publish MQTT Discovery
+# ---------------------------------------------------------
 def publish_discovery(client, base_topic, entry, sector_name):
     dtype, key, name2, uuid = entry
 
@@ -179,11 +197,43 @@ def publish_discovery(client, base_topic, entry, sector_name):
     client.publish(topic, json.dumps(payload), retain=True)
 
 
+# ---------------------------------------------------------
+# Pre‑start Dachs connection test
+# ---------------------------------------------------------
+def check_dachs_connection(session, host, port, user, password):
+    """Проверяет доступность Dachs и корректность авторизации."""
+    test_key = "Hka_Mw1.Temp.sbZS_Vorlauf2"  # любой существующий ключ
+    url = f"http://{host}:{port}/getKey"
+
+    try:
+        resp = session.get(
+            url,
+            params={"k": test_key},
+            auth=(user, password) if user else None,
+            timeout=5
+        )
+
+        if resp.status_code == 401:
+            _LOGGER.error("Dachs API отклонил авторизацию (401 Unauthorized). Проверьте логин/пароль.")
+            return False
+
+        resp.raise_for_status()
+        _LOGGER.info("Авторизация успешна — соединение с Dachs установлено.")
+        return True
+
+    except Exception as e:
+        _LOGGER.error("Не удалось подключиться к Dachs (%s:%s): %s", host, port, e)
+        return False
+
+
+# ---------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------
 def main():
     options = load_options()
 
     host = options["dachs_host"]
-    port = options.get("dachs_port", 8080)  # ← НОВОЕ
+    port = options.get("dachs_port", 8080)
     user = options["dachs_user"]
     password = options.get("dachs_password", "")
     base_topic = options.get("base_topic", "dachs")
@@ -204,11 +254,16 @@ def main():
 
     session = requests.Session()
 
+    # Pre‑start connection test
+    check_dachs_connection(session, host, port, user, password)
+
+    # Publish discovery
     for entry, sector_name in entries:
         publish_discovery(client, base_topic, entry, sector_name)
 
     _LOGGER.info("MQTT Discovery published for %d entities", len(entries))
 
+    # Main loop
     while True:
         for entry, sector_name in entries:
             dtype, key, name2, uuid = entry
@@ -216,7 +271,12 @@ def main():
 
             try:
                 url = f"http://{host}:{port}/getKey"
-                resp = session.get(url, params={"k": key}, timeout=5)
+                resp = session.get(
+                    url,
+                    params={"k": key},
+                    auth=(user, password) if user else None,
+                    timeout=5
+                )
                 resp.raise_for_status()
                 value_raw = resp.text.strip()
             except Exception as e:

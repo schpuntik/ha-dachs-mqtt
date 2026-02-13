@@ -1,5 +1,5 @@
 name: Dachs MQTT Bridge
-version: "1.0.19"
+version: "1.0.20"
 slug: dachs_mqtt
 description: Reads Dachs values and publishes them to MQTT with HA Discovery
 startup: services
@@ -17,7 +17,7 @@ arch:
 options:
   dachs_host: 192.168.178.77
   dachs_port: 8080
-  dachs_user: GLT
+  dachs_user: glt
   dachs_password: PASSWORT
 
   mqtt_host: 192.168.178.141
