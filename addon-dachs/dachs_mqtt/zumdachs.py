@@ -139,7 +139,6 @@ ZumDachs = (
 		[1,"Mm_MinMax.ModulStartMax.ulWert",	  "Max Anzahl Starts",                ""],
 		[1,"Mm_MinMax.ModulStartMin.bModulNr",    "Modulnummer mit min Anzahl Starts",""],
 		[1,"Mm_MinMax.ModulStartMin.ulWert",	  "Min Anzahl Starts",                ""],
-ZumDachs = (
 		[1,"Hka_Bd.Anforderung.ModulAnzahl",        "Anzahl der angeforderten Module",          ""],
 		[4,"Hka_Bd.Anforderung.UStromF_Anf.bFlagSF","Anforderungen Stromfuehrung Bit Codiert",  ""],
 		[4,"Hka_Bd.UStromF_Frei.bFreigabe",         "Freigabe Stromfuehrung Bit Codiert",       ""],
