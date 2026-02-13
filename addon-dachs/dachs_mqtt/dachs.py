@@ -211,8 +211,9 @@ def publish_discovery(client, base_topic, entry, sector_name):
 def main():
     options = load_options()
 
-    host = options["host"]
-    port = options["port"]
+    host = options["dachs_host"]
+    user = options["dachs_user"]
+    password = options.get("dachs_password", "")
     base_topic = options.get("base_topic", "dachs")
 
     mqtt_host = options["mqtt_host"]
