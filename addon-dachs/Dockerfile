@@ -9,7 +9,7 @@ RUN apk add --no-cache \
     py3-paho-mqtt
 
 # Копируем код аддона
-COPY dachs_mqtt /usr/src/app/dachs_mqtt
+COPY addon-dachs/dachs_mqtt  /usr/src/app/dachs_mqtt
 
 # Устанавливаем рабочую директорию
 WORKDIR /usr/src/app
