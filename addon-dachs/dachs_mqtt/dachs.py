@@ -46,7 +46,6 @@ def load_options():
 # Нормализация MQTT-топиков
 # ---------------------------------------------------------
 def sanitize_topic(s: str) -> str:
-    # MQTT запрещает # и +
     return s.replace("#", "_").replace("+", "_")
 
 
@@ -153,14 +152,16 @@ def publish_discovery(client, base_topic, entry, sector_name):
     unit = classification["unit"]
     device_name = classification["device_name"]
 
+    # ВОЗВРАЩАЕМ НАЗВАНИЕ СЕНСОРА ИЗ 3 ПОЛЯ
     entity_id = normalize_entity_id(f"{sector_name}_{name}")
+
     safe_key = sanitize_topic(key)
     state_topic = f"{base_topic}/{safe_key}"
 
     unique_id = uuid if uuid else f"dachs_{normalize_entity_id(key)}"
 
     payload = {
-        "name": name,
+        "name": name,  # ← ВОТ ЗДЕСЬ ВОЗВРАЩЕНО ПОЛЕ 3
         "unique_id": unique_id,
         "state_topic": state_topic,
         "device": {
@@ -238,9 +239,8 @@ def main():
 
             value = value_raw
             try:
-                if dtype == 1:
-                    if value_raw != "":
-                        value = float(value_raw.replace(",", "."))
+                if dtype == 1 and value_raw != "":
+                    value = float(value_raw.replace(",", "."))
             except Exception:
                 value = value_raw
 
