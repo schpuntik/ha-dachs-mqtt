@@ -12,14 +12,36 @@ _LOGGER = logging.getLogger("dachs_mqtt")
 
 OPTIONS_PATH = Path("/data/options.json")
 
+DEFAULT_OPTIONS = {
+    "mqtt_host": "localhost",
+    "mqtt_port": 1883,
+    "mqtt_user": "",
+    "mqtt_password": "",
+    "interval": 10,
+
+    # Добавлено:
+    "host": "localhost",
+    "port": 8080,
+    "base_topic": "dachs",
+    "sectors": {}
+}
+
 
 # ---------------------------------------------------------
 # Загрузка конфигурации аддона
 # ---------------------------------------------------------
 def load_options():
+    # Если файла нет — создаём дефолтный
+    if not OPTIONS_PATH.exists():
+        print("options.json not found — creating default config")
+        OPTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with OPTIONS_PATH.open("w", encoding="utf-8") as f:
+            json.dump(DEFAULT_OPTIONS, f, indent=2)
+        return DEFAULT_OPTIONS
+
+    # Если файл есть — читаем
     with OPTIONS_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
-
 
 # ---------------------------------------------------------
 # Сбор активных записей по секторам
